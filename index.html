@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Fat Cat Run</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: #000;
+    }
+    canvas {
+      display: block;
+      background: #bde0fe;
+    }
+    #calorieDisplay {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      font-size: 32px;
+      font-family: 'Comic Sans MS', sans-serif;
+      background: rgba(255, 000, 000, 0.7);
+      padding: 10px 20px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px #000;
+      z-index: 2;
+    }
+
+    #startScreen, #endScreen {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: #000;
+      color: white;
+      font-family: 'Comic Sans MS', sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      z-index: 3;
+    }
+
+    #startButton {
+      margin-top: 20px;
+      padding: 15px 30px;
+      font-size: 24px;
+      border: none;
+      border-radius: 10px;
+      background: #ffcc00;
+      color: #000;
+      cursor: pointer;
+      box-shadow: 0 0 10px #fff;
+    }
+
+    #evilCat {
+      width: 300px;
+      animation: shake 0.5s infinite;
+    }
+
+    @keyframes shake {
+      0% { transform: translate(0px, 0px) rotate(0deg); }
+      25% { transform: translate(5px, 5px) rotate(5deg); }
+      50% { transform: translate(-5px, -5px) rotate(-5deg); }
+      75% { transform: translate(5px, -5px) rotate(5deg); }
+      100% { transform: translate(0px, 0px) rotate(0deg); }
+    }
+
+    .custom-button {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      border: none;
+      background: none;
+      cursor: pointer;
+      z-index: 4;
+    }
+    .custom-button img {
+      width: 40px;
+      height: 40px;
+    }
+    .custom-button img:hover {
+      opacity: 0.8;
+    }
+
+    .watermark {
+      position: absolute;
+      bottom: 10px;
+      width: 100%;
+      text-align: center;
+      color: white;
+      font-family: 'Comic Sans MS', sans-serif;
+      font-size: 16px;
+      z-index: 4;
+    }
+  </style>
+</head>
+<body>
+
+<a href="http://jadeisdead.com/" target="_blank" class="custom-button">
+  <img src="https://media.tenor.com/yso9Ncqwm5UAAAAi/click-subscribe.gif" alt="Custom Button">
+</a>
+<div class="watermark">Created by Undead Nexus</div>
+
+<div id="startScreen">
+  <img src="fatcat.png" alt="Fat Cat" style="width: 200px;">
+  <h1>Welcome to FAT CAT RUN!</h1>
+  <p>Use the LEFT and RIGHT arrow keys to move.<br>
+     EAT the junk food, DODGE the broccoli.<br>
+     Hit calorie goals to summon the GOLDEN MEGA BURGER!<br>
+     Reach 2000 calories... if you dare.
+  </p>
+  <button id="startButton">START</button>
+</div>
+
+<div id="endScreen" style="display: none;">
+  <img id="evilCat" src="evilcat.png" alt="Evil Fat Cat">
+  <h1 id="endText">I have hit 2000 calories. 
+This is my daily intake, and you fed me fcking burgers...
+ Are you happy now?
+I'm fat, is this really what you wanted?</h1>
+</div>
+
+<canvas id="gameCanvas" style="display:none;"></canvas>
+<div id="calorieDisplay" style="display:none;">Calories: 0</div>
+
+<script>
+let gameStarted = false;
+let gameEnded = false;
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+const fatCatImg = new Image(); fatCatImg.src = 'fatcat.png';
+const junkFoodImg = new Image(); junkFoodImg.src = 'junkfood.png';
+const broccoliImg = new Image(); broccoliImg.src = 'broccoli.png';
+const megaBurgerImg = new Image(); megaBurgerImg.src = 'megaburger.png';
+
+const cat = { x: canvas.width / 2 - 75, y: canvas.height - 150, width: 175, height: 175, speed: 10 };
+
+let foods = [];
+let megaBurger = null;
+const megaBurgerMilestones = [50, 100, 200, 500, 1000, 1500];
+let nextMilestoneIndex = 0;
+let keys = {};
+let score = 0;
+let calories = 0;
+
+document.getElementById('startButton').addEventListener('click', () => {
+  document.getElementById('startScreen').style.display = 'none';
+  canvas.style.display = 'block';
+  document.getElementById('calorieDisplay').style.display = 'block';
+  gameStarted = true;
+  gameLoop();
+});
+
+document.addEventListener('keydown', e => keys[e.code] = true);
+document.addEventListener('keyup', e => keys[e.code] = false);
+
+function playSound(src) {
+  const sound = new Audio(src);
+  sound.volume = 0.6;
+  sound.play().catch(() => {});
+}
+
+function createFood() {
+  const isBroccoli = Math.random() < 0.3;
+  return {
+    x: Math.random() * (canvas.width - 80),
+    y: -80,
+    width: 80,
+    height: 80,
+    speed: 3 + Math.random() * 2,
+    type: isBroccoli ? 'broccoli' : 'junk'
+  };
+}
+
+function createMegaBurger() {
+  return {
+    x: Math.random() * (canvas.width - 100),
+    y: -100,
+    width: 200,
+    height: 200,
+    speed: 4
+  };
+}
+
+function gameLoop() {
+  if (!gameStarted || gameEnded) return;
+  update();
+  draw();
+  requestAnimationFrame(gameLoop);
+}
+
+function update() {
+  if (keys['ArrowLeft'] && cat.x > 0) cat.x -= cat.speed;
+  if (keys['ArrowRight'] && cat.x < canvas.width - cat.width) cat.x += cat.speed;
+
+  for (let i = foods.length - 1; i >= 0; i--) {
+    const food = foods[i];
+    food.y += food.speed;
+
+    if (cat.x < food.x + food.width && cat.x + cat.width > food.x &&
+        cat.y < food.y + food.height && cat.y + cat.height > food.y) {
+      if (food.type === 'junk') {
+        score++;
+        calories += 10;
+        playSound('chomp.mp3');
+      } else {
+        calories = Math.max(0, calories - 10);
+        playSound('miss.mp3');
+      }
+      foods.splice(i, 1);
+      spawnMoreFood();
+    } else if (food.y > canvas.height) {
+      foods.splice(i, 1);
+      spawnMoreFood();
+    }
+  }
+
+  if (!megaBurger && nextMilestoneIndex < megaBurgerMilestones.length &&
+      calories >= megaBurgerMilestones[nextMilestoneIndex]) {
+    megaBurger = createMegaBurger();
+    nextMilestoneIndex++;
+  }
+
+  if (megaBurger) {
+    megaBurger.y += megaBurger.speed;
+
+    if (cat.x < megaBurger.x + megaBurger.width &&
+        cat.x + cat.width > megaBurger.x &&
+        cat.y < megaBurger.y + megaBurger.height &&
+        cat.y + cat.height > megaBurger.y) {
+      calories += 100;
+      playSound('chomp.mp3');
+      megaBurger = null;
+    } else if (megaBurger.y > canvas.height) {
+      megaBurger = null;
+    }
+  }
+
+  if (calories >= 2000) {
+    endGame();
+  }
+
+  document.getElementById('calorieDisplay').textContent = `Calories: ${calories}`;
+
+  if (foods.length === 0) {
+    spawnMoreFood();
+  }
+}
+
+function spawnMoreFood() {
+  const maxFoods = 25;
+  const currentCount = foods.length;
+  const foodCount = Math.min(1 + Math.floor(score / 5), maxFoods - currentCount);
+  for (let i = 0; i < foodCount; i++) {
+    foods.push(createFood());
+  }
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(fatCatImg, cat.x, cat.y, cat.width, cat.height);
+  foods.forEach(food => {
+    const img = food.type === 'junk' ? junkFoodImg : broccoliImg;
+    ctx.drawImage(img, food.x, food.y, food.width, food.height);
+  });
+
+  if (megaBurger) {
+    ctx.drawImage(megaBurgerImg, megaBurger.x, megaBurger.y, megaBurger.width, megaBurger.height);
+  }
+}
+
+function endGame() {
+  gameEnded = true;
+  canvas.style.display = 'none';
+  document.getElementById('calorieDisplay').style.display = 'none';
+  document.getElementById('endScreen').style.display = 'flex';
+}
+</script>
+
+</body>
+</html>
